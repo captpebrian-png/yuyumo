@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FStore Mail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Inter,system-ui,-apple-system,sans-serif}
+.fade-in{animation:fade .3s ease-in-out}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.spinner{border:4px solid rgba(255,255,255,.2);border-top:4px solid white;border-radius:50%;width:32px;height:32px;animation:spin 1s linear infinite;margin:auto}
+@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+</style>
+</head>
+
+<body class="bg-[#5c1f12] min-h-screen text-white">
+
+<header class="flex justify-between items-center px-6 py-5">
+    <div class="flex items-center gap-3">
+        <img src="fstore-logo.png" class="h-8">
+        <h1 class="text-xl font-semibold">FStore Mail</h1>
+    </div>
+</header>
+
+<main class="px-6 pt-4 pb-10">
+
+<div id="createSection" class="space-y-6 fade-in">
+    <input id="aliasInput" placeholder="Enter Username" class="w-full bg-[#7a3b2d] px-5 py-4 rounded-2xl text-lg">
+    <select id="domainSelect" class="w-full bg-[#7a3b2d] px-5 py-4 rounded-2xl text-lg"></select>
+    <button onclick="createEmail()" class="w-full bg-pink-500 py-4 rounded-2xl text-lg font-semibold">Create</button>
+    <button onclick="generateRandomEmail()" class="w-full bg-blue-600 py-4 rounded-2xl text-lg font-semibold">Random</button>
+</div>
+
+<div id="activeSection" class="hidden space-y-6 fade-in">
+    <div class="bg-[#7a3b2d] px-5 py-4 rounded-2xl flex justify-between">
+        <span id="activeEmail"></span>
+    </div>
+
+    <div class="grid grid-cols-4 gap-4 text-center">
+        <button onclick="copyEmail()" class="bg-[#7a3b2d] py-6 rounded-2xl">📋<br>Copy</button>
+        <button onclick="refreshInbox()" class="bg-[#7a3b2d] py-6 rounded-2xl">🔄<br>Refresh</button>
+        <button onclick="resetToCreate()" class="bg-[#7a3b2d] py-6 rounded-2xl">➕<br>New</button>
+        <button onclick="deleteEmail()" class="bg-[#7a3b2d] py-6 rounded-2xl">🗑️<br>Delete</button>
+    </div>
+</div>
+
+</main>
+
+<section id="inboxArea" class="bg-gray-200 text-gray-700 text-center py-20 text-lg">
+    Empty Inbox
+</section>
+
+<script>
+const API_KEY='lapannoldua';
+const DOMAINS_API=`https://citayam.com/api/domains/${API_KEY}`;
+const MESSAGE_API=`https://citayam.com/api/messages/${API_KEY}/`;
+
+let currentEmail='';
+let domainsList=[];
+let refreshInterval=null;
+
+async function fetchDomains(){
+ try{
+  const res=await fetch(DOMAINS_API);
+  const data=await res.json();
+  domainsList=Array.isArray(data)?data:(data.domains||data.data||[]);
+  domainsList.forEach(d=>{
+    const clean=d.replace('@','');
+    const opt=document.createElement('option');
+    opt.value=clean;
+    opt.textContent=clean;
+    domainSelect.appendChild(opt);
+  });
+ }catch{}
+}
+
+function createEmail(){
+ const alias=aliasInput.value.trim();
+ const domain=domainSelect.value;
+ if(!alias)return alert('Masukkan username dulu');
+ currentEmail=`${alias}@${domain}`;
+ activateEmail();
+}
+
+function generateRandomEmail(){
+ if(domainsList.length===0)return;
+ const randomAlias=Math.random().toString(36).substring(2,10);
+ const randomDomain=domainsList[Math.floor(Math.random()*domainsList.length)].replace('@','');
+ currentEmail=`${randomAlias}@${randomDomain}`;
+ activateEmail();
+}
+
+function activateEmail(){
+ localStorage.setItem('fstore_active_email',currentEmail);
+ activeEmail.textContent=currentEmail;
+ createSection.classList.add('hidden');
+ activeSection.classList.remove('hidden');
+ startAutoRefresh();
+ loadInbox();
+}
+
+function copyEmail(){
+ navigator.clipboard.writeText(currentEmail);
+}
+
+function resetToCreate(){
+ stopAutoRefresh();
+ activeSection.classList.add('hidden');
+ createSection.classList.remove('hidden');
+}
+
+function deleteEmail(){
+ stopAutoRefresh();
+ localStorage.removeItem('fstore_active_email');
+ currentEmail='';
+ inboxArea.innerHTML='Empty Inbox';
+ resetToCreate();
+}
+
+async function refreshInbox(){
+ loadInbox();
+}
+
+async function loadInbox(){
+ inboxArea.innerHTML='<div class="spinner"></div>';
+ try{
+  const res=await fetch(MESSAGE_API+currentEmail);
+  const data=await res.json();
+
+  if(!data || data.length===0){
+    inboxArea.innerHTML='Empty Inbox';
+    return;
+  }
+
+  inboxArea.innerHTML=data.map(m=>`
+    <div class='p-4 border-b text-left'>
+      <div class='font-semibold'>${m.subject||'No Subject'}</div>
+      <div class='text-sm text-gray-500'>${m.from||''}</div>
+      <div class='text-sm mt-1'>${m.body||''}</div>
+    </div>
+  `).join('');
+
+ }catch(e){
+  inboxArea.innerHTML='Failed to load inbox';
+ }
+}
+
+function startAutoRefresh(){
+ stopAutoRefresh();
+ refreshInterval=setInterval(loadInbox,7000);
+}
+
+function stopAutoRefresh(){
+ if(refreshInterval){
+  clearInterval(refreshInterval);
+  refreshInterval=null;
+ }
+}
+
+function loadFromStorage(){
+ const saved=localStorage.getItem('fstore_active_email');
+ if(saved){
+  currentEmail=saved;
+  activateEmail();
+ }
+}
+
+fetchDomains();
+loadFromStorage();
+</script>
+
+</body>
+</html>
